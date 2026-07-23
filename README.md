@@ -1,7 +1,7 @@
-> # JapaneseToRomaji
+> # FuriganaCord
 This is a plugin for the Discord client: Vencord.
 
-This plugin provides Romaji pronunciation of Japanese characters, live and diegetically.
+This plugin provides both Furigana above Japanese characters and Romaji pronunciation of Japanese underneath characters, live and diegetically.
 
 ## First Time Setup
 Vencord is not modular, so you have to build from source to add custom plugins.
