@@ -6,34 +6,62 @@
 
 import "./styles.css";
 
+import { ChatBarButton, type ChatBarButtonFactory } from "@api/ChatButtons";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
-import definePlugin, { OptionType } from "@utils/types";
-import { useLayoutEffect, useRef, useState } from "@webpack/common";
+import { FormSwitch } from "@components/FormSwitch";
+import { Divider } from "@components/index";
+import definePlugin, { type IconComponent, OptionType } from "@utils/types";
+import { type RenderModalProps } from "@vencord/discord-types";
+import { Modal, openModal, useLayoutEffect, useRef, useState } from "@webpack/common";
 
-import { loadKanaMap, toRomaji } from "./kana";
-import type { KanjiInfo } from "./kanji";
-// eslint-disable-next-line no-duplicate-imports
-import { isDictReady, loadDict, lookupKanji, onReady } from "./kanji";
-import type { RenderOptions } from "./romaji";
-// eslint-disable-next-line no-duplicate-imports
-import { containsJapanese, escapeHtml, renderRubyText } from "./romaji";
+import { loadCompounds } from "./compounds";
+import { loadKanaMap, onKanaReady, toRomaji } from "./kana";
+import { type KanjiInfo, loadDict, lookupKanji, onReady, setNameOverrides, stripOkurigana } from "./kanji";
+import { containsJapanese, escapeHtml, type RenderOptions, renderRubyText } from "./romaji";
 
 const settings = definePluginSettings({
-    annotateKanji: {
+    furiganaNotation: {
         type: OptionType.BOOLEAN,
         default: true,
-        description: "Show romaji readings under kanji characters",
+        description: "Show kana readings above kanji characters (furigana)",
     },
-    annotateKana: {
+    romajiNotation: {
         type: OptionType.BOOLEAN,
         default: true,
-        description: "Show romaji readings under kana characters",
+        description: "Show romaji readings under Japanese characters",
     },
-    showTooltip: {
+    usernameNotation: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Show readings under Japanese usernames in chat",
+    },
+    annotationFontSize: {
+        type: OptionType.NUMBER,
+        default: 75,
+        description: "Annotation font size (%)",
+        isValid: (v: number) => v >= 30 && v <= 200,
+    },
+    _separator1: {
+        type: OptionType.COMPONENT,
+        description: "",
+        component: () => <Divider style={{ margin: "16px 0" }} />,
+    },
+    kanjiTooltips: {
         type: OptionType.BOOLEAN,
         default: true,
         description: "Show kanji info tooltip on hover",
+    },
+    tooltipFontSize: {
+        type: OptionType.NUMBER,
+        default: 85,
+        description: "Tooltip font size (%)",
+        isValid: (v: number) => v >= 50 && v <= 200,
+    },
+    _separator2: {
+        type: OptionType.COMPONENT,
+        description: "",
+        component: () => <Divider style={{ margin: "16px 0" }} />,
     },
     readingPreference: {
         type: OptionType.SELECT,
@@ -44,34 +72,72 @@ const settings = definePluginSettings({
             { label: "On'yomi (音読み)", value: "on" },
         ],
     },
-    rubyFontSize: {
-        type: OptionType.NUMBER,
-        default: 75,
-        description: "Ruby annotation font size (%)",
-        isValid: (v: number) => v >= 30 && v <= 200,
-    },
-    annotateUsernames: {
-        type: OptionType.BOOLEAN,
-        default: true,
-        description: "Show romaji readings under Japanese usernames in chat",
-    },
-    tooltipFontSize: {
-        type: OptionType.NUMBER,
-        default: 85,
-        description: "Tooltip font size (%)",
-        isValid: (v: number) => v >= 50 && v <= 200,
-    },
-    dictUrl: {
+    nameOverrides: {
         type: OptionType.STRING,
-        default: "https://raw.githubusercontent.com/RaylaValdez/jp-kanji/refs/heads/main/kanji.json",
-        description: "URL to fetch the kanji dictionary JSON from",
+        default: '{"天道 剣":"Tendou Tsurugi","芽森":"Me Mori"}',
+        description: 'JSON object of name to reading overrides, e.g. {"名前":"yomi"}',
     },
-    kanaUrl: {
+    baseUrl: {
         type: OptionType.STRING,
-        default: "https://raw.githubusercontent.com/RaylaValdez/jp-kanji/refs/heads/main/kana.json",
-        description: "URL to fetch the kana→romaji mapping JSON from",
+        default: "https://raw.githubusercontent.com/RaylaValdez/jp-kanji/main/",
+        description: "Base URL for dictionary data files (kana.json, kanji.json, compounds.json)",
     },
 });
+
+const JPSettingsIcon: IconComponent = ({ height = 20, width = 20, className }) => (
+    <svg
+        width={width}
+        height={height}
+        className={className}
+        viewBox="0 0 24 24"
+    >
+        <text x="12" y="21" fontSize="25" fill="currentColor" textAnchor="middle">あ</text>
+    </svg>
+);
+
+function JPSettingsModal({ rootProps }: { rootProps: RenderModalProps; }) {
+    const s = settings.use(["furiganaNotation", "romajiNotation", "usernameNotation", "kanjiTooltips", "readingPreference"]);
+
+    return (
+        <Modal {...rootProps} title="FuriganaCord Settings">
+            <FormSwitch
+                title="Furigana"
+                description="Show kana readings above kanji characters"
+                value={s.furiganaNotation}
+                onChange={v => (s.furiganaNotation = v)}
+                hideBorder
+            />
+            <FormSwitch
+                title="Romaji"
+                description="Show romaji readings under Japanese characters"
+                value={s.romajiNotation}
+                onChange={v => (s.romajiNotation = v)}
+                hideBorder
+            />
+            <FormSwitch
+                title="Kanji Tooltips"
+                description="Show kanji info tooltip on hover"
+                value={s.kanjiTooltips}
+                onChange={v => (s.kanjiTooltips = v)}
+                hideBorder
+            />
+        </Modal>
+    );
+}
+
+const JPSettingsButton: ChatBarButtonFactory = ({ isMainChat }) => {
+    if (!isMainChat) return null;
+
+    return (
+        <ChatBarButton
+            tooltip="FuriganaCord Settings"
+            onClick={() => openModal(props => <JPSettingsModal rootProps={props} />)}
+            buttonProps={{ "aria-haspopup": "dialog" }}
+        >
+            <JPSettingsIcon />
+        </ChatBarButton>
+    );
+};
 
 interface RubyAnnotatorProps {
     message?: {
@@ -89,11 +155,6 @@ interface TooltipState {
 let sharedTooltipEl: HTMLDivElement | null = null;
 let hideTimeout: ReturnType<typeof setTimeout> | null = null;
 
-function stripOkurigana(reading: string): string {
-    const dot = reading.lastIndexOf(".");
-    return dot >= 0 ? reading.slice(0, dot) : reading;
-}
-
 function tooltipHTML(state: TooltipState): string {
     const { kanji, info } = state;
     const jishoUrl = `https://jisho.org/search/${encodeURIComponent(kanji)}%20%23kanji`;
@@ -104,7 +165,7 @@ function tooltipHTML(state: TooltipState): string {
             const stem = stripOkurigana(r);
             const romaji = toRomaji(stem);
             return `<ruby>${stem}<rt>${romaji}</rt></ruby>`;
-        }).join("、");
+        }).join("\u3001");
         html += "</span></div>";
     }
     if (info.on.length > 0) {
@@ -168,18 +229,20 @@ function hideTooltip() {
 
 const RubyAnnotator: React.FC<RubyAnnotatorProps> = ({ message }) => {
     const ref = useRef<HTMLDivElement>(null);
-    const [dictReady, setDictReady] = useState(isDictReady);
+    const [dictReady, setDictReady] = useState(false);
+
+    settings.use(["furiganaNotation", "romajiNotation", "usernameNotation", "readingPreference", "annotationFontSize"]);
+
+    const { furiganaNotation, romajiNotation, readingPreference, annotationFontSize: rubyFontSize } = settings.store;
 
     useLayoutEffect(() => {
-        loadDict(settings.store.dictUrl);
-        loadKanaMap(settings.store.kanaUrl);
         onReady(() => setDictReady(true));
+        onKanaReady(() => setDictReady(prev => prev || true));
     }, []);
-
-    const { annotateKanji, annotateKana, readingPreference, rubyFontSize } = settings.store;
 
     useLayoutEffect(() => {
         if (!ref.current) return;
+        if (!dictReady) return;
         const container = ref.current.parentElement;
         if (!container) return;
 
@@ -193,11 +256,11 @@ const RubyAnnotator: React.FC<RubyAnnotatorProps> = ({ message }) => {
         const content = message?.content;
         if (!content || !containsJapanese(content)) return;
 
-        if (!annotateKanji && !annotateKana) return;
+        if (!romajiNotation && !furiganaNotation) return;
 
         const renderOptions: RenderOptions = {
-            annotateKanji: dictReady && annotateKanji,
-            annotateKana,
+            furiganaNotation,
+            romajiNotation,
             readingPreference: readingPreference as "kun" | "on",
         };
 
@@ -209,6 +272,9 @@ const RubyAnnotator: React.FC<RubyAnnotatorProps> = ({ message }) => {
             {
                 acceptNode(node) {
                     if (ref.current?.contains(node))
+                        return NodeFilter.FILTER_REJECT;
+                    const el = node.parentElement;
+                    if (el?.closest("[class*='repliedTextPreview']"))
                         return NodeFilter.FILTER_REJECT;
                     return NodeFilter.FILTER_ACCEPT;
                 }
@@ -232,7 +298,7 @@ const RubyAnnotator: React.FC<RubyAnnotatorProps> = ({ message }) => {
         }
 
         const handleKanjiEnter = (e: Event) => {
-            if (!settings.store.showTooltip) return;
+            if (!settings.store.kanjiTooltips) return;
             const el = e.currentTarget as HTMLElement;
             const char = (el.getAttribute("data-kanji") || "")[0] || "";
             const info = lookupKanji(char);
@@ -262,27 +328,58 @@ const RubyAnnotator: React.FC<RubyAnnotatorProps> = ({ message }) => {
                 el.removeEventListener("mouseleave", handleKanjiLeave);
             });
         };
-    }, [message?.content, dictReady, annotateKanji, annotateKana, readingPreference, rubyFontSize]);
+    }, [message?.content, furiganaNotation, romajiNotation, readingPreference, rubyFontSize, dictReady]);
 
     return <div ref={ref} style={{ display: "none" }} />;
 };
 
 const UsernameAnnotator: React.FC<{ name: string; }> = ({ name }) => {
-    const [dictReady, setDictReady] = useState(isDictReady);
+    const ref = useRef<HTMLSpanElement>(null);
+    const [dictReady, setDictReady] = useState(false);
+
+    settings.use(["furiganaNotation", "romajiNotation", "readingPreference"]);
 
     useLayoutEffect(() => {
         onReady(() => setDictReady(true));
+        onKanaReady(() => setDictReady(prev => prev || true));
     }, []);
 
+    useLayoutEffect(() => {
+        if (!ref.current) return;
+
+        let ancestor: HTMLElement | null = ref.current.parentElement;
+        let effectBg = "";
+        while (ancestor && ancestor !== document.body) {
+            const cs = getComputedStyle(ancestor);
+            if (cs.webkitBackgroundClip === "text" && cs.backgroundImage !== "none") {
+                effectBg = cs.backgroundImage;
+                break;
+            }
+            ancestor = ancestor.parentElement;
+        }
+
+        if (effectBg) {
+            ref.current.style.setProperty("--jp-effect-bg", effectBg);
+            ref.current.dataset.hasEffect = "";
+        } else {
+            ref.current.style.removeProperty("--jp-effect-bg");
+            delete ref.current.dataset.hasEffect;
+        }
+    });
+
     const renderOptions: RenderOptions = {
-        annotateKanji: dictReady && settings.store.annotateKanji,
-        annotateKana: settings.store.annotateKana,
+        furiganaNotation: settings.store.furiganaNotation,
+        romajiNotation: settings.store.romajiNotation,
         readingPreference: settings.store.readingPreference as "kun" | "on",
     };
 
+    if (!dictReady) return <span>{name}</span>;
+
+    const html = renderRubyText(name, renderOptions);
+
     const handleOver = (e: React.MouseEvent<HTMLSpanElement>) => {
         const target = (e.target as HTMLElement).closest("[data-kanji]");
-        if (!target || !settings.store.showTooltip) return;
+        if (!target || !settings.store.kanjiTooltips) return;
         const char = (target.getAttribute("data-kanji") || "")[0] || "";
         const info = lookupKanji(char);
         if (info) {
@@ -299,19 +396,21 @@ const UsernameAnnotator: React.FC<{ name: string; }> = ({ name }) => {
 
     return (
         <span
+            ref={ref}
             data-jp-ruby=""
+            data-username-ruby=""
             onMouseOver={handleOver}
             onMouseLeave={handleLeave}
             dangerouslySetInnerHTML={{
-                __html: renderRubyText(name, renderOptions)
+                __html: html
             }}
         />
     );
 };
 
 export default definePlugin({
-    name: "JapaneseToRomaji",
-    description: "Shows romaji under Japanese characters in messages",
+    name: "FuriganaCord",
+    description: "Shows romaji under Japanese characters, or furigana above Kanji in messages",
     tags: ["Chat"],
     authors: [{
         name: "gerry_of_ravine",
@@ -320,8 +419,36 @@ export default definePlugin({
 
     settings,
 
-    start() {
-        console.log("[JapaneseToRomaji] Loaded!");
+    chatBarButton: {
+        icon: JPSettingsIcon,
+        render: JPSettingsButton,
+    },
+
+    async start() {
+        const base = settings.store.baseUrl;
+        const url = base.endsWith("/") ? base : base + "/";
+
+        try {
+            setNameOverrides(JSON.parse(settings.store.nameOverrides));
+        } catch { }
+
+        Promise.all([
+            loadKanaMap(url + "kana.json"),
+            loadDict(url + "kanji.json"),
+            loadCompounds(url + "compounds.json"),
+        ]).then(() => {
+            console.log("[FuriganaCord] All dictionaries loaded!");
+        });
+
+        console.log("[FuriganaCord] Loading dictionaries...");
+    },
+
+    stop() {
+        hideTooltip();
+        if (hideTimeout) {
+            clearTimeout(hideTimeout);
+            hideTimeout = null;
+        }
     },
 
     patches: [
@@ -341,23 +468,24 @@ export default definePlugin({
         }
     ],
 
-    RubyAnnotation: ErrorBoundary.wrap(RubyAnnotator),
+    RubyAnnotation: ErrorBoundary.wrap(RubyAnnotator, { noop: true }),
 
     UsernameAnnotation(props: any) {
         try {
             let name = typeof props._oldChildren === "string" ? props._oldChildren : "";
 
             if (!name) {
-                const nick = props.author?.nick;
+                const nick = props.author?.nick || props.nick;
                 const user = props.message?.author;
-                name = nick || user?.globalName || user?.username || "";
+                name = nick || user?.globalName || user?.username || props.username || props.displayName || "";
             }
 
             if (!name) return null;
-            if (!settings.store.annotateUsernames || !containsJapanese(name)) return name;
+            if (!settings.store.usernameNotation || !containsJapanese(name)) return name;
 
             return <UsernameAnnotator name={name} />;
-        } catch {
+        } catch (e) {
+            console.error("[FuriganaCord] UsernameAnnotation error:", e);
             return null;
         }
     },

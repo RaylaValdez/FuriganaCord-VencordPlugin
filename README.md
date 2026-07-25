@@ -1,25 +1,37 @@
 > # FuriganaCord
-This is a plugin for the Discord client: Vencord.
+A plugin for Vencord that adds Japanese reading annotations to Discord messages.
 
-This plugin provides both Furigana above Japanese characters and Romaji pronunciation of Japanese underneath characters, live and diegetically.
+## What it does
+- **Furigana** - shows kana readings above kanji characters
+- **Romaji** - shows romaji pronunciation under Japanese characters
+- **Username readings** - shows readings under Japanese usernames in chat
+- **Kanji tooltips** - hover over any kanji to see its kun/on readings, meanings, and a link to Jisho.org
+- **Verb conjugation** - recognizes common verb forms and shows the stem reading
 
-## First Time Setup
-Vencord is not modular, so you have to build from source to add custom plugins.
-Follow this guide for getting set up: https://docs.vencord.dev/installing/custom-plugins/
+## Chatbar button
+There's a あ button in the chat input that opens a quick settings modal with toggles for furigana, romaji, and kanji tooltips.
 
-## How to install a plugin
-1. Direct your terminal to the `userplugins` folder, e.g. `cd src/userplugins`. If you're confused, read the guide above
-2. Each plugin post will contain a GitHub repo link, like `https://github.com/PluginAuthor/CoolPlugin`. Copy it
-3. Inside your terminal, run
-```sh
-git clone https://github.com/...
-```
+## Settings
+| Setting | Default | What it does |
+|---|---|---|
+| Furigana | on | Show kana above kanji |
+| Romaji | on | Show romaji under characters |
+| Username readings | on | Show readings under usernames |
+| Annotation font size | 75% | Size of the ruby annotations (30-200%) |
+| Kanji tooltips | on | Show hover tooltip with readings and meanings |
+| Tooltip font size | 85% | Size of the tooltip text (50-200%) |
+| Reading preference | Kun'yomi | Choose between kun'yomi and on'yomi readings |
+| Name overrides | - | JSON object mapping names to custom readings |
 
-## How to update plugins
-You will have to make sure to keep up with the latest changes to fix issues and get new features. You can update a plugin by directing your terminal to its folder (`cd src/userplugins/coolPlugin`) and running:
-```sh
-git pull
-```
+## Setup
+This plugin fetches dictionary data from GitHub on first load. The default source is my repo: https://github.com/RaylaValdez/jp-kanji
 
-## Vencord's own install instructions
-https://discord.com/channels/1015060230222131221/1257038407503446176
+If you want to host your own dictionaries, change the Base URL setting to point to a folder containing `kana.json`, `kanji.json`, and `compounds.json`.
+
+### Building from source
+Vencord doesn't support loading custom plugins out of the box. You need to build from source:
+1. Follow the guide at https://docs.vencord.dev/installing/custom-plugins/
+2. Clone this repo into `src/userplugins/`
+3. Build Vencord as normal
+
+To update, run `git pull` inside the plugin folder.

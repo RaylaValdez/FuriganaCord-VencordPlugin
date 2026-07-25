@@ -6,15 +6,11 @@
 
 let kanaMap: Record<string, string> = {};
 let mapReady = false;
-
 const readyCallbacks: Array<() => void> = [];
 
 export function onKanaReady(cb: () => void) {
-    if (mapReady) {
-        cb();
-    } else {
-        readyCallbacks.push(cb);
-    }
+    if (mapReady) { cb(); return; }
+    readyCallbacks.push(cb);
 }
 
 export async function loadKanaMap(url: string) {
@@ -25,13 +21,12 @@ export async function loadKanaMap(url: string) {
         mapReady = true;
         readyCallbacks.splice(0).forEach(cb => cb());
     } catch (e) {
-        console.error("[JapaneseToRomaji] Failed to load kana map:", e);
+        console.error("[FuriganaCord] Failed to load kana map:", e);
         setTimeout(() => loadKanaMap(url), 30_000);
     }
 }
 
 export function toRomaji(text: string): string {
-    if (!mapReady) return text;
     let result = "";
     let i = 0;
     while (i < text.length) {
@@ -47,7 +42,7 @@ export function toRomaji(text: string): string {
             i += 1;
             continue;
         }
-        if (one === "っ" || one === "ッ") {
+        if (one === "\u3063" || one === "\u30C3") {
             const next = text[i + 1];
             if (next && next in kanaMap) {
                 result += kanaMap[next][0];
